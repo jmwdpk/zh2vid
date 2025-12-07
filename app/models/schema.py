@@ -127,6 +127,10 @@ class VideoParams(BaseModel):
     image_similarity_threshold: Optional[float] = 0.7
     image_similarity_model: Optional[str] = "clip-vit-base-patch32"
     
+    # Article-based generation settings
+    article_url: Optional[str] = None  # URL to parse for content
+    use_article_images: Optional[bool] = True  # Use images from article when available
+    
     n_threads: Optional[int] = 2
     paragraph_number: Optional[int] = 1
 
