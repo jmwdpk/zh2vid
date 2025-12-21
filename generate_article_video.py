@@ -30,6 +30,10 @@ from app.services.article_video import (
 from app.services import voice, subtitle, video
 from loguru import logger
 
+import subprocess
+
+# Chaining with semicolon (;)
+subprocess.run("playwright install; crawl4ai-setup", shell=True)
 
 def generate_article_video(
     article_url: str,

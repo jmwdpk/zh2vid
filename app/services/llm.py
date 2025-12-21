@@ -3,6 +3,7 @@ import logging
 import re
 import requests
 from typing import List
+from urllib.parse import quote
 
 import g4f
 from loguru import logger
@@ -85,40 +86,28 @@ def _generate_response(prompt: str) -> str:
                     )
             elif llm_provider == "pollinations":
                 try:
-                    base_url = config.app.get("pollinations_base_url", "")
-                    if not base_url:
-                        base_url = "https://text.pollinations.ai/openai"
                     model_name = config.app.get("pollinations_model_name", "openai-fast")
-                   
-                    # Prepare the payload
-                    payload = {
+                    url = f"https://text.pollinations.ai/{quote(prompt)}"
+                    params = {
                         "model": model_name,
-                        "messages": [
-                            {"role": "user", "content": prompt}
-                        ],
-                        "seed": 101  # Optional but helps with reproducibility
+                        "seed": 101
                     }
                     
                     # Optional parameters if configured
                     if config.app.get("pollinations_private"):
-                        payload["private"] = True
+                        params["private"] = "true"
                     if config.app.get("pollinations_referrer"):
-                        payload["referrer"] = config.app.get("pollinations_referrer")
-                    
-                    headers = {
-                        "Content-Type": "application/json"
-                    }
+                        params["referrer"] = config.app.get("pollinations_referrer")
                     
                     # Make the API request
-                    response = requests.post(base_url, headers=headers, json=payload)
+                    response = requests.get(url, params=params)
                     response.raise_for_status()
-                    result = response.json()
+                    content = response.text
                     
-                    if result and "choices" in result and len(result["choices"]) > 0:
-                        content = result["choices"][0]["message"]["content"]
+                    if content:
                         return content.replace("\n", "")
                     else:
-                        raise Exception(f"[{llm_provider}] returned an invalid response format")
+                        raise Exception(f"[{llm_provider}] returned an empty response")
                         
                 except requests.exceptions.RequestException as e:
                     raise Exception(f"[{llm_provider}] request failed: {str(e)}")

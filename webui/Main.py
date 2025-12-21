@@ -389,7 +389,7 @@ if not config.app.get("hide_config", False):
                     tips = """
                             ##### Pollinations AI Configuration
                             - **API Key**: Optional - Leave empty for public access
-                            - **Base Url**: Default is https://text.pollinations.ai/openai
+                            - **Base Url**: Default is https://text.pollinations.ai/
                             - **Model Name**: Use 'openai-fast' or specify a model name
                             """
 

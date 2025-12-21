@@ -37,7 +37,7 @@ llm_provider = "openai"
 # API Key is optional - leave empty for public access
 pollinations_api_key = ""
 # Default base URL for Pollinations API
-pollinations_base_url = "https://pollinations.ai/api/v1"
+pollinations_base_url = "https://text.pollinations.ai/"
 # Default model for text generation
 pollinations_model_name = "openai-fast"
 

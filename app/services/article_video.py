@@ -58,23 +58,18 @@ Generate {amount} search terms for stock videos/images that would visually repre
 """.strip()
 
     try:
-        # Use pollinations.ai API
-        base_url = config.app.get("pollinations_base_url", "https://text.pollinations.ai/openai")
+        # Use pollinations.ai API (GET method)
         model_name = config.app.get("pollinations_model_name", "openai-fast")
-        
-        payload = {
+        url = f"https://text.pollinations.ai/{quote(prompt)}"
+        params = {
             "model": model_name,
-            "messages": [{"role": "user", "content": prompt}],
             "seed": 42
         }
         
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(base_url, headers=headers, json=payload, timeout=30)
+        response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
-        
-        result = response.json()
-        if result and "choices" in result and len(result["choices"]) > 0:
-            content = result["choices"][0]["message"]["content"]
+        content = response.text
+        if content:
             # Parse JSON array from response
             import json
             # Find JSON array in response
@@ -85,7 +80,7 @@ Generate {amount} search terms for stock videos/images that would visually repre
                     logger.debug(f"Generated search terms: {search_terms}")
                     return search_terms[:amount]
         
-        logger.warning(f"Failed to parse search terms from response: {result}")
+        logger.warning(f"Failed to parse search terms from response: {content}")
         return []
         
     except Exception as e:
@@ -328,8 +323,8 @@ def process_article_to_segments_sync(url: str) -> Tuple[List[ScriptSegment], Lis
 
 if __name__ == "__main__":
     # Test with sample URL
-    test_url = 'https://zhuanlan.zhihu.com/p/1970939067463104119'
-    
+    # test_url = 'https://zhuanlan.zhihu.com/p/1970939067463104119'
+    # test_url = 'https://zhuanlan.zhihu.com/p/1986191794870964353'
     print("Testing article processing...")
     segments, image_links, title = process_article_to_segments_sync(test_url)
     
