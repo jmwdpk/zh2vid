@@ -24,14 +24,14 @@ def extract_post_info(res):
     text = str(res)
 
     # Extract the title (between 登录/注册 and 切换模式)
-    title_pattern = r"登录/注册\s*(.*?)\s*切换模式"
+    title_pattern = r"关注\s*(.*?)\s*来源"
     title_match = re.search(title_pattern, text, re.DOTALL)
-    title = title_match.group(1).strip() if title_match else "标题未找到"
+    title = title_match.group(1).strip() if title_match else "title not found"
 
     # Extract the main post content (between 已认证机构号 and 发布于)
-    content_pattern = r"已认证机构号\s*(.*?)\s*发布于"
+    content_pattern = r"作者： 华尔街见闻，\s*(.*?)\s*本文不构成个人投资建议"
     content_match = re.search(content_pattern, text, re.DOTALL)
-    content = content_match.group(1).strip() if content_match else "正文未找到"
+    content = content_match.group(1).strip() if content_match else "content not found"
 
     # Return in markdown format
     markdown_result = f"# {title}\n\n{content}"
@@ -41,21 +41,26 @@ def extract_post_info(res):
 # remove all search?content_id links in () and replace specific image links with their index
 
 
+# def process_markdown(markdown_output):
+#     # Extract image links
+#     image_links = re.findall(r'https://.*?zhimg\.com/.*?\.jpg', markdown_output)
+
+#     cleaned_output = markdown_output
+
+#     # Replace image links with their index
+#     for i, link in enumerate(image_links):
+#         cleaned_output = cleaned_output.replace(link, f'${i+1}$', 1) # Replace only the first occurrence
+
+#     # Remove the specified search links in parentheses
+#     cleaned_output = re.sub(r'\((https://zhida\.zhihu\.com/search\?content_id=.*?&zd_token=.*?)\)', '', cleaned_output)
+
+#     return cleaned_output, image_links
+
 def process_markdown(markdown_output):
-    # Extract image links
-    image_links = re.findall(r'https://.*?zhimg\.com/.*?\.jpg', markdown_output)
-
-    cleaned_output = markdown_output
-
-    # Replace image links with their index
-    for i, link in enumerate(image_links):
-        cleaned_output = cleaned_output.replace(link, f'${i+1}$', 1) # Replace only the first occurrence
-
-    # Remove the specified search links in parentheses
-    cleaned_output = re.sub(r'\((https://zhida\.zhihu\.com/search\?content_id=.*?&zd_token=.*?)\)', '', cleaned_output)
-
-    return cleaned_output, image_links
-
+    #remove all links starting with https://xueqiu.com/, images starting with ![](https://xqimg.imedao.com/
+    cleaned_output = re.sub(r'\((https://xueqiu\.com/.*?)\)', '', markdown_output)
+    cleaned_output = re.sub(r'!\(\[.*?\]\(https://xqimg\.imedao\.com/.*?\.jpg\)\)', '', cleaned_output)
+    return cleaned_output
 
 
 #translate the cleaned markdown to a youtube short script
