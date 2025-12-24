@@ -57,10 +57,26 @@ def extract_post_info(res):
 #     return cleaned_output, image_links
 
 def process_markdown(markdown_output):
-    #remove all links starting with https://xueqiu.com/, images starting with ![](https://xqimg.imedao.com/
-    cleaned_output = re.sub(r'\((https://xueqiu\.com/.*?)\)', '', markdown_output)
-    cleaned_output = re.sub(r'!\(\[.*?\]\(https://xqimg\.imedao\.com/.*?\.jpg\)\)', '', cleaned_output)
-    return cleaned_output
+    # Extract Xueqiu image links
+    image_links = re.findall(r'https://xqimg\.imedao\.com/.*?\.jpg', markdown_output)
+    
+    cleaned_output = markdown_output
+    # Replace image links with their index $i+1$
+    for i, link in enumerate(image_links):
+        # Target common markdown image formats or raw links
+        pattern = rf'!\[.*?\]\({re.escape(link)}\)'
+        if re.search(pattern, cleaned_output):
+            cleaned_output = re.sub(pattern, f'![](${i+1}$)', cleaned_output, count=1)
+        else:
+            cleaned_output = cleaned_output.replace(link, f'${i+1}$', 1)
+
+    # Remove all links starting with https://xueqiu.com/
+    cleaned_output = re.sub(r'\((https://xueqiu\.com/.*?)\)', '', cleaned_output)
+    
+    # Remove specific pattern if it remains (per user's previous request)
+    cleaned_output = re.sub(r'!\(\[.*?\]\(\$.*?\$\)\)', '', cleaned_output)
+    
+    return cleaned_output, image_links
 
 
 #translate the cleaned markdown to a youtube short script
