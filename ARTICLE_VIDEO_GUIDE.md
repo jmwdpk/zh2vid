@@ -42,6 +42,9 @@ python generate_article_video.py
 # Custom article URL
 python generate_article_video.py --url "https://your-article-url.com"
 
+# Custom article URL with English translation
+python generate_article_video.py --url "https://your-article-url.com" --lang "English"
+
 # Landscape video for YouTube
 python generate_article_video.py --aspect landscape
 

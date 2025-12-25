@@ -42,7 +42,8 @@ def generate_article_video(
     voice_rate: float = 1.0,
     video_aspect: VideoAspect = VideoAspect.portrait,
     video_source: str = "pexels",
-    words_per_second: float = 2.5
+    words_per_second: float = 2.5,
+    target_language: Optional[str] = None
 ):
     """
     Generate a complete video from an article URL.
@@ -71,7 +72,7 @@ def generate_article_video(
     logger.info("=" * 60)
     
     try:
-        segments, image_links, title = process_article_to_segments_sync(article_url)
+        segments, image_links, title = process_article_to_segments_sync(article_url, target_language=target_language)
     except Exception as e:
         logger.error(f"Failed to parse article: {e}")
         return None
@@ -321,6 +322,13 @@ Examples:
         help="Words per second for duration estimation (default: 2.5)"
     )
     
+    parser.add_argument(
+        "--lang",
+        type=str,
+        default=None,
+        help="Target language for translation (e.g., 'English')"
+    )
+    
     args = parser.parse_args()
     
     # Convert aspect string to enum
@@ -344,7 +352,8 @@ Examples:
         voice_rate=args.rate,
         video_aspect=video_aspect,
         video_source=args.source,
-        words_per_second=args.wps
+        words_per_second=args.wps,
+        target_language=args.lang
     )
     
     if final_video:

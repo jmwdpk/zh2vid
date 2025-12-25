@@ -22,8 +22,53 @@ from app.services.utils.process_md import (
     get_script_segments,
     ScriptSegment,
 )
-from app.services import material, video, voice
+from app.services import material, video, voice, llm
 from app.utils import utils
+
+
+def translate_text(text: str, target_lang: str = "English") -> str:
+    """
+    Translate text using pollinations.ai.
+    
+    Args:
+        text: The text to translate
+        target_lang: The target language (default: English)
+        
+    Returns:
+        Translated text, or original text if translation fails
+    """
+    if not text or not text.strip():
+        return text
+        
+    prompt = f"""
+# Role: Professional Translator
+
+## Goals:
+Translate the following text into {target_lang}.
+
+## Constraints:
+1. Maintain the professional and informative tone.
+2. Keep the original structure and formatting (markdown).
+3. IMPORTANT: Preserve any image patterns like ![]($1$), ![]($2$), etc. EXACTLY as they appear. Do not translate the numbers or symbols within these patterns.
+4. Return ONLY the translated text, nothing else.
+
+## Text to Translate:
+{text}
+""".strip()
+
+    try:
+        translated_text = llm.generate_response(prompt, strip_newlines=False)
+        
+        if translated_text and not translated_text.startswith("Error:"):
+            logger.info("Translation successful")
+            return translated_text
+        
+        logger.warning(f"Translation failed or returned error: {translated_text}")
+        return text
+    except Exception as e:
+        logger.error(f"Failed to translate text: {str(e)}")
+        return text
+
 
 
 def generate_segment_search_terms(segment_text: str, amount: int = 3) -> List[str]:
@@ -280,12 +325,13 @@ def get_segment_visual(
     return None
 
 
-async def process_article_to_segments(url: str) -> Tuple[List[ScriptSegment], List[str], str]:
+async def process_article_to_segments(url: str, target_language: Optional[str] = None) -> Tuple[List[ScriptSegment], List[str], str]:
     """
     Process an article URL into script segments.
     
     Args:
         url: The article URL to process
+        target_language: Optional language to translate the script into (e.g., "English")
         
     Returns:
         Tuple of (segments, image_links, title)
@@ -304,7 +350,12 @@ async def process_article_to_segments(url: str) -> Tuple[List[ScriptSegment], Li
     cleaned_markdown, image_links = process_markdown(extracted)
     logger.info(f"Found {len(image_links)} images in article")
     
-    # Step 4: Split into segments
+    # Step 4: Translate if requested
+    if target_language:
+        logger.info(f"Translating article to {target_language}...")
+        cleaned_markdown = translate_text(cleaned_markdown, target_lang=target_language)
+    
+    # Step 5: Split into segments
     segments = get_script_segments(cleaned_markdown)
     logger.info(f"Created {len(segments)} script segments")
     
@@ -316,9 +367,9 @@ async def process_article_to_segments(url: str) -> Tuple[List[ScriptSegment], Li
     return segments, image_links, title
 
 
-def process_article_to_segments_sync(url: str) -> Tuple[List[ScriptSegment], List[str], str]:
+def process_article_to_segments_sync(url: str, target_language: Optional[str] = None) -> Tuple[List[ScriptSegment], List[str], str]:
     """Synchronous wrapper for process_article_to_segments."""
-    return asyncio.run(process_article_to_segments(url))
+    return asyncio.run(process_article_to_segments(url, target_language))
 
 
 if __name__ == "__main__":

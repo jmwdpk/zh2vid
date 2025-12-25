@@ -15,7 +15,7 @@ from app.config import config
 _max_retries = 5
 
 
-def _generate_response(prompt: str) -> str:
+def generate_response(prompt: str, strip_newlines: bool = True) -> str:
     try:
         content = ""
         llm_provider = config.app.get("llm_provider", "openai")
@@ -105,7 +105,9 @@ def _generate_response(prompt: str) -> str:
                     content = response.text
                     
                     if content:
-                        return content.replace("\n", "")
+                        if strip_newlines:
+                            return content.replace("\n", "")
+                        return content
                     else:
                         raise Exception(f"[{llm_provider}] returned an empty response")
                         
@@ -145,7 +147,9 @@ def _generate_response(prompt: str) -> str:
                             )
 
                         content = response["output"]["text"]
-                        return content.replace("\n", "")
+                        if strip_newlines:
+                            return content.replace("\n", "")
+                        return content
                     else:
                         raise Exception(
                             f'[{llm_provider}] returned an invalid response: "{response}"'
@@ -275,7 +279,9 @@ def _generate_response(prompt: str) -> str:
                     f"[{llm_provider}] returned an empty response, please check your network connection and try again."
                 )
 
-        return content.replace("\n", "")
+        if strip_newlines:
+            return content.replace("\n", "")
+        return content
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -330,7 +336,7 @@ Generate a script for a video, depending on the subject of the video.
 
     for i in range(_max_retries):
         try:
-            response = _generate_response(prompt=prompt)
+            response = generate_response(prompt=prompt)
             if response:
                 final_script = format_response(response)
             else:
@@ -387,7 +393,7 @@ Please note that you must use English for generating video search terms; Chinese
     response = ""
     for i in range(_max_retries):
         try:
-            response = _generate_response(prompt)
+            response = generate_response(prompt)
             if "Error: " in response:
                 logger.error(f"failed to generate video script: {response}")
                 return response
