@@ -1002,6 +1002,63 @@ def generate_video(
     del video_clip
 
 
+def 
+def add_subtitles(video_path: str, subtitle_path: str, output_path: str):
+    """
+    Burn subtitles into video.
+    Extracts audio from video_path to use as audio_path for generate_video.
+    """
+    if not os.path.exists(video_path):
+        logger.error(f"Video path not found: {video_path}")
+        return
+
+    temp_audio = f"{output_path}.temp.mp3"
+    
+    try:
+        # Extract audio from existing video to preserve it
+        # (generate_video expects separate audio and strips it from input video)
+        clip = VideoFileClip(video_path)
+        if clip.audio:
+            clip.audio.write_audiofile(temp_audio, logger=None, codec=audio_codec)
+        clip.close()
+        
+        if not os.path.exists(temp_audio):
+            logger.warning("No audio found in video, proceeding without audio")
+            # Create silent audio
+            from moviepy.audio.AudioClip import AudioClip
+            silent_audio = AudioClip(lambda t: 0, duration=0.1)
+            silent_audio.write_audiofile(temp_audio, fps=44100)
+
+        # Create basic params for subtitle generation
+        params = VideoParams(
+            video_subject="Caption",
+            subtitle_enabled=True,
+            font_size=60,
+            text_fore_color="#FFFFFF",
+            font_name="STHeitiMedium.ttc"
+        )
+        
+        generate_video(
+            video_path=video_path,
+            audio_path=temp_audio,
+            subtitle_path=subtitle_path,
+            output_file=output_path,
+            params=params
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to add subtitles: {e}")
+        # If failure, try to just copy original to output if output doesn't exist
+        if os.path.exists(video_path) and not os.path.exists(output_path):
+             shutil.copy(video_path, output_path)
+    
+    finally:
+        if os.path.exists(temp_audio):
+            try:
+                os.remove(temp_audio)
+            except:
+                pass
+
 def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
     for material in materials:
         if not material.url:

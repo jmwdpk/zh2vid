@@ -1,6 +1,7 @@
 import json
 import os.path
 import re
+from typing import Any
 from timeit import default_timer as timer
 
 from faster_whisper import WhisperModel
@@ -15,7 +16,58 @@ compute_type = config.whisper.get("compute_type", "int8")
 model = None
 
 
+def create_subtitle(
+    task_id: str,
+    script: str,
+    audio_file: str,
+    voice_name: str,
+    sub_maker: Any
+) -> str:
+    """
+    Generate subtitles for the video, prioritizing edge-tts/sub_maker if available,
+    otherwise falling back to Whisper.
+    """
+    from app.services import voice
+    
+    subtitle_path = os.path.join(utils.task_dir(task_id), "subtitle.srt")
+    subtitle_provider = config.app.get("subtitle_provider", "edge").strip().lower()
+
+    if os.path.exists(subtitle_path):
+        os.remove(subtitle_path)
+
+    # Check if Chatterbox TTS was used
+    is_chatterbox = voice.is_chatterbox_voice(voice_name)
+    
+    # Try using sub_maker first if provider is edge
+    subtitle_fallback = False
+    if subtitle_provider == "edge":
+        if is_chatterbox and sub_maker and hasattr(sub_maker, 'subs'):
+            # Use specialized Chatterbox subtitle function
+            logger.info("Using Chatterbox-optimized subtitle generation")
+            voice.create_chatterbox_subtitle(
+                sub_maker=sub_maker, text=script, subtitle_file=subtitle_path
+            )
+        elif sub_maker:
+             # Use standard subtitle function for Azure TTS
+            voice.create_subtitle(
+                text=script, sub_maker=sub_maker, subtitle_file=subtitle_path
+            )
+        
+        if not os.path.exists(subtitle_path):
+            subtitle_fallback = True
+            logger.warning("subtitle file not found (edge), fallback to whisper")
+
+    # Fallback to Whisper
+    if subtitle_provider == "whisper" or subtitle_fallback or not os.path.exists(subtitle_path):
+        create(audio_file=audio_file, subtitle_file=subtitle_path)
+        logger.info("correcting subtitle by whisper")
+        correct(subtitle_file=subtitle_path, video_script=script)
+
+    return subtitle_path
+
+
 def create(audio_file, subtitle_file: str = ""):
+    #uses OpenAI Whisper to listen to the audio file and transcribe it
     global model
     if not model:
         model_path = f"{utils.root_dir()}/models/whisper-{model_size}"
@@ -137,6 +189,9 @@ def create(audio_file, subtitle_file: str = ""):
 
 
 def file_to_subtitles(filename):
+    #reads a subtitle file and returns a list of tuples containing the index, start time, and text.
+    #each tuple is in the format (index, start_time, text).
+    #parses a .srt file into a list of python objects (times and text)
     if not filename or not os.path.isfile(filename):
         return []
 
