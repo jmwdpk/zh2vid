@@ -34,7 +34,8 @@ from loguru import logger
 import subprocess
 
 # Chaining with semicolon (;)
-subprocess.run("playwright install; crawl4ai-setup", shell=True)
+# subprocess.run("playwright install; crawl4ai-setup", shell=True)
+subprocess.run("crawl4ai-setup", shell=True)
 
 def generate_article_video(
     article_url: str,
@@ -80,7 +81,7 @@ def generate_article_video(
         logger.error(f"Failed to parse article: {e}")
         return None
     
-    logger.success(f"✓ Parsed article: '{title}'")
+    logger.success(f"✓ Parsed article with title: '{title}'")
     logger.info(f"  - {len(segments)} script segments")
     logger.info(f"  - {len(image_links)} embedded images")
     
