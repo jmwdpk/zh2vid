@@ -18,7 +18,7 @@ _max_retries = 5
 def generate_response(prompt: str, strip_newlines: bool = True) -> str:
     try:
         content = ""
-        llm_provider = config.app.get("llm_provider", "openai")
+        llm_provider = config.app.get("llm_provider", "pollinations")
         logger.info(f"llm provider: {llm_provider}")
         if llm_provider == "g4f":
             model_name = config.app.get("g4f_model_name", "")

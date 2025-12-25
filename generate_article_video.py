@@ -45,7 +45,6 @@ def generate_article_video(
     video_aspect: VideoAspect = VideoAspect.portrait,
     video_source: str = "pexels",
     words_per_second: float = 2.5,
-    words_per_second: float = 2.5,
     target_language: Optional[str] = None,
     use_image: List[int] = []
 ):
@@ -113,7 +112,6 @@ def generate_article_video(
                 segment_duration=segment_duration,
                 image_links=image_links,
                 task_dir=task_dir,
-                video_aspect=video_aspect,
                 video_aspect=video_aspect,
                 video_source=video_source,
                 allowed_image_indices=use_image
@@ -366,7 +364,6 @@ Examples:
         voice_rate=args.rate,
         video_aspect=video_aspect,
         video_source=args.source,
-        words_per_second=args.wps,
         words_per_second=args.wps,
         target_language=args.lang,
         use_image=args.use_image
