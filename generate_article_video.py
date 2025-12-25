@@ -17,6 +17,7 @@ import os
 import sys
 import argparse
 from pathlib import Path
+from typing import List, Optional
 
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -43,7 +44,9 @@ def generate_article_video(
     video_aspect: VideoAspect = VideoAspect.portrait,
     video_source: str = "pexels",
     words_per_second: float = 2.5,
-    target_language: Optional[str] = None
+    words_per_second: float = 2.5,
+    target_language: Optional[str] = None,
+    use_image: List[int] = []
 ):
     """
     Generate a complete video from an article URL.
@@ -110,7 +113,9 @@ def generate_article_video(
                 image_links=image_links,
                 task_dir=task_dir,
                 video_aspect=video_aspect,
-                video_source=video_source
+                video_aspect=video_aspect,
+                video_source=video_source,
+                allowed_image_indices=use_image
             )
             
             if video_path and os.path.exists(video_path):
@@ -328,6 +333,14 @@ Examples:
         default=None,
         help="Target language for translation (e.g., 'English')"
     )
+
+    parser.add_argument(
+        "--use-image",
+        nargs="*",
+        type=int,
+        default=[],
+        help="List of image indices (0-based) to use from article. Default is empty (use no images)."
+    )
     
     args = parser.parse_args()
     
@@ -353,7 +366,9 @@ Examples:
         video_aspect=video_aspect,
         video_source=args.source,
         words_per_second=args.wps,
-        target_language=args.lang
+        words_per_second=args.wps,
+        target_language=args.lang,
+        use_image=args.use_image
     )
     
     if final_video:

@@ -86,14 +86,15 @@ def generate_segment_search_terms(segment_text: str, amount: int = 3) -> List[st
 # Role: Video Search Terms Generator
 
 ## Goals:
-Generate {amount} search terms for stock videos/images that would visually represent this script segment.
+Generate/summarize/extract {amount} search terms for stock videos/images that would visually represent this script segment.
 
 ## Constraints:
-1. Return ONLY a JSON array of strings, nothing else.
+1. Return ONLY an array of strings, nothing else.
 2. Each search term should be 1-3 words.
 3. Terms must be in English.
 4. Terms should describe visual scenes, objects, or actions that match the text meaning.
 5. Focus on concrete, searchable concepts (not abstract ideas).
+6. Keep the notable/famous figure's name as a term
 
 ## Script Segment:
 {segment_text}
@@ -262,7 +263,8 @@ def get_segment_visual(
     image_links: List[str],
     task_dir: str,
     video_aspect: VideoAspect = VideoAspect.portrait,
-    video_source: str = "pexels"
+    video_source: str = "pexels",
+    allowed_image_indices: List[int] = []
 ) -> Optional[str]:
     """
     Get video/image for a segment - either from article images or by searching.
@@ -274,30 +276,38 @@ def get_segment_visual(
         task_dir: Directory for saving files
         video_aspect: Video aspect ratio
         video_source: Video search source (pexels/pixabay)
+        allowed_image_indices: List of image indices (0-based) to allow using. 
+                              If empty, no article images will be used.
         
     Returns:
         Path to the video file for this segment
     """
     if segment.has_image and segment.image_index is not None:
-        # Use article image
-        image_idx = segment.image_index - 1  # Convert to 0-indexed
-        if 0 <= image_idx < len(image_links):
-            image_url = image_links[image_idx]
-            logger.info(f"Using article image {segment.image_index}: {image_url}")
-            
-            # Download image
-            image_path = download_image(image_url, task_dir)
-            if image_path:
-                # Convert to video
-                video_path = os.path.join(task_dir, f"segment-img-{segment.image_index}.mp4")
-                return create_video_from_image(
-                    image_path, 
-                    segment_duration, 
-                    video_path, 
-                    video_aspect
-                )
+        # Check if this image index is allowed
+        # segment.image_index is 1-based, convert to 0-based for checking
+        image_idx = segment.image_index - 1
+        
+        if image_idx in allowed_image_indices:
+            # Use article image
+            if 0 <= image_idx < len(image_links):
+                image_url = image_links[image_idx]
+                logger.info(f"Using article image {segment.image_index} (Index {image_idx}): {image_url}")
+                
+                # Download image
+                image_path = download_image(image_url, task_dir)
+                if image_path:
+                    # Convert to video
+                    video_path = os.path.join(task_dir, f"segment-img-{segment.image_index}.mp4")
+                    return create_video_from_image(
+                        image_path, 
+                        segment_duration, 
+                        video_path, 
+                        video_aspect
+                    )
+            else:
+                logger.warning(f"Image index {segment.image_index} out of range (have {len(image_links)} images)")
         else:
-            logger.warning(f"Image index {segment.image_index} out of range (have {len(image_links)} images)")
+            logger.info(f"Skipping article image {segment.image_index} (Index {image_idx} not in allowed list {allowed_image_indices})")
     
     # Search for video/image based on segment content
     search_terms = generate_segment_search_terms(segment.text)
