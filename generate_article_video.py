@@ -331,7 +331,7 @@ Examples:
     parser.add_argument(
         "--lang",
         type=str,
-        default=None,
+        default='English',
         help="Target language for translation (e.g., 'English')"
     )
 
