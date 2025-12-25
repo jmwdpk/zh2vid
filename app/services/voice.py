@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 from datetime import datetime
-from typing import Union
+from typing import Union, Tuple, Optional, Any
 from xml.sax.saxutils import unescape
 
 # Suppress warnings and handle CUDA library conflicts
@@ -1146,6 +1146,64 @@ def is_siliconflow_voice(voice_name: str):
 def is_chatterbox_voice(voice_name: str):
     """检查是否是Chatterbox的声音"""
     return voice_name.startswith("chatterbox:")
+
+
+def create_voiceover(
+    text: str,
+    voice_name: str,
+    voice_rate: float,
+    task_id: str
+) -> Tuple[Optional[str], float, Any]:
+    """
+    Generate voiceover audio from text.
+    
+    Args:
+        text: Script text
+        voice_name: Voice name to use
+        voice_rate: Speech rate
+        task_id: Task ID for storage path
+        
+    Returns:
+        Tuple of (audio_file_path, audio_duration_seconds, sub_maker)
+    """
+    storage_path = config.app.get("storage_path", "./storage")
+    task_dir = os.path.join(storage_path, task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    
+    audio_file = os.path.join(task_dir, "audio.mp3")
+    
+    # Use the general tts dispatcher which handles all voice types (Azure, SiliconFlow, Chatterbox)
+    sub_maker = tts(
+        text=text,
+        voice_name=voice_name,
+        voice_rate=voice_rate,
+        voice_file=audio_file
+    )
+    
+    if not sub_maker or not os.path.exists(audio_file):
+        logger.error("Voiceover generation failed")
+        return None, 0.0, None
+        
+    # Calculate duration from subtitles or file
+    duration = 0.0
+    if sub_maker and sub_maker.offset:
+        # Last subtitle end time (in 100ns units in SubMaker)
+        # We start by checking the last offset
+        last_offset = sub_maker.offset[-1]
+        # offset is typically (start, end)
+        duration = last_offset[1] / 10000000.0
+    else:
+        # Fallback to file duration if offsets aren't available
+        try:
+            from moviepy import AudioFileClip
+            if os.path.exists(audio_file):
+                clip = AudioFileClip(audio_file)
+                duration = clip.duration
+                clip.close()
+        except Exception as e:
+            logger.warning(f"Could not determine audio duration: {e}")
+            
+    return audio_file, duration, sub_maker
 
 
 def tts(
