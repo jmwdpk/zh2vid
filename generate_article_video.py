@@ -238,6 +238,8 @@ def generate_article_video(
         final_video_path = combined_video_path
         logger.info("No subtitles to add, using combined video as final")
     
+    # 7. use title to generate an thumbnail and an youtube video title thats engaging/eye-catching for click
+#to do
     # Summary
     logger.info("=" * 60)
     logger.success("VIDEO GENERATION COMPLETE!")

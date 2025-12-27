@@ -44,10 +44,10 @@ def translate_text(text: str, target_lang: str = "English") -> str:
 # Role: Professional Translator
 
 ## Goals:
-Translate the following text into {target_lang}.
+Translate the following text into {target_lang}, generate a script that can be used for creating a finance youtube short video
 
 ## Constraints:
-1. Maintain the professional and informative tone.
+1. Maintain the financially professional and informative tone(re-word if necessary) 
 2. Keep the original structure and formatting (markdown).
 3. IMPORTANT: Preserve any image patterns like ![]($1$), ![]($2$), etc. EXACTLY as they appear. Do not translate the numbers or symbols within these patterns.
 4. Return ONLY the translated text, nothing else.

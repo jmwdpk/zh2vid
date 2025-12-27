@@ -28,8 +28,8 @@ def extract_post_info(res):
     title_match = re.search(title_pattern, text, re.DOTALL)
     title = title_match.group(1).strip() if title_match else "title not found"
 
-    # Extract the main post content (between 已认证机构号 and 发布于)
-    content_pattern = r"作者： 华尔街见闻，\s*(.*?)\s*本文不构成个人投资建议"
+    # Extract the main post content (between 作者： 华尔街见闻 and 本文来自华尔街见闻)
+    content_pattern = r"作者： 华尔街见闻,\s*(.*?)\s*本文来自华尔街见闻"
     content_match = re.search(content_pattern, text, re.DOTALL)
     content = content_match.group(1).strip() if content_match else "content not found"
 
@@ -80,21 +80,21 @@ def process_markdown(markdown_output):
 
 
 #translate the cleaned markdown to a youtube short script
-def translate_to_script(cleaned_output):
-    # remove word: upvote
-    prompt = f"translate {cleaned_output}   in financially professional english(re-word if necessary) to generate a script ,   that can be used for creating \
-    a finance youtube short video, remove special characters like: >  keep the paragraph/bullet structure of the input, make sure to keep the pattern like ![]($number$) in place as is, but do not add any extra words \
-    split the result as title and content, separated by: a number + 'upvote', save the output as json"
+# def translate_to_script(cleaned_output):
+#     # remove word: upvote
+#     prompt = f"translate {cleaned_output}   in financially professional english(re-word if necessary) to generate a script ,   that can be used for creating \
+#     a finance youtube short video, remove special characters like: >  keep the paragraph/bullet structure of the input, make sure to keep the pattern like ![]($number$) in place as is, but do not add any extra words \
+#     split the result as title and content, separated by: a number + 'upvote', save the output as json"
 
-    url = f"https://text.pollinations.ai/{quote(prompt)}"
+#     url = f"https://text.pollinations.ai/{quote(prompt)}"
 
-    print(url)
+#     print(url)
 
-    params = {"model": "openai"}
+#     params = {"model": "openai"}
 
-    # Get the response
-    response = requests.get(url, params=params)
-    return response.json()
+#     # Get the response
+#     response = requests.get(url, params=params)
+#     return response.json()
 
 
 def split_markdown_for_video_with_image_split(text, max_words=150):
