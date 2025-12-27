@@ -29,7 +29,7 @@ def extract_post_info(res):
     title = title_match.group(1).strip() if title_match else "title not found"
 
     # Extract the main post content (between 作者： 华尔街见闻 and 本文来自华尔街见闻)
-    content_pattern = r"作者： 华尔街见闻,\s*(.*?)\s*本文来自华尔街见闻"
+    content_pattern = r"作者： 华尔街见闻[，,].*?\n(.*?)\s*本文来自华尔街见闻"
     content_match = re.search(content_pattern, text, re.DOTALL)
     content = content_match.group(1).strip() if content_match else "content not found"
 
