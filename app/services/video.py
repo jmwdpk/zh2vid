@@ -1017,7 +1017,8 @@ def add_subtitles(video_path: str, subtitle_path: str, output_path: str):
         # (generate_video expects separate audio and strips it from input video)
         clip = VideoFileClip(video_path)
         if clip.audio:
-            clip.audio.write_audiofile(temp_audio, logger=None, codec=audio_codec)
+            # Use libmp3lame codec for MP3 files (aac is for M4A/MP4)
+            clip.audio.write_audiofile(temp_audio, logger=None, codec='libmp3lame')
         clip.close()
         
         if not os.path.exists(temp_audio):
