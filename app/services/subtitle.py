@@ -59,9 +59,20 @@ def create_subtitle(
 
     # Fallback to Whisper
     if subtitle_provider == "whisper" or subtitle_fallback or not os.path.exists(subtitle_path):
+        logger.info("Using Whisper for subtitle generation")
         create(audio_file=audio_file, subtitle_file=subtitle_path)
         logger.info("correcting subtitle by whisper")
         correct(subtitle_file=subtitle_path, video_script=script)
+    
+    # Validate subtitle file
+    if os.path.exists(subtitle_path):
+        # Check for malformed entries
+        with open(subtitle_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            if 'content not found' in content or '00:00:00,000 --> 00:00:00,000' in content:
+                logger.warning("Detected malformed subtitle entries, regenerating with Whisper")
+                create(audio_file=audio_file, subtitle_file=subtitle_path)
+                correct(subtitle_file=subtitle_path, video_script=script)
 
     return subtitle_path
 

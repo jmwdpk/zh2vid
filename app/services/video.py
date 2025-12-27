@@ -1003,59 +1003,53 @@ def generate_video(
 
 def add_subtitles(video_path: str, subtitle_path: str, output_path: str):
     """
-    Burn subtitles into video.
-    Extracts audio from video_path to use as audio_path for generate_video.
+    Burn subtitles into video using ffmpeg directly while preserving audio.
+    This is a simpler approach than re-compositing the entire video.
     """
     if not os.path.exists(video_path):
         logger.error(f"Video path not found: {video_path}")
         return
-
-    temp_audio = f"{output_path}.temp.mp3"
+    
+    if not os.path.exists(subtitle_path):
+        logger.warning(f"Subtitle path not found: {subtitle_path}, copying video without subtitles")
+        shutil.copy(video_path, output_path)
+        return
     
     try:
-        # Extract audio from existing video to preserve it
-        # (generate_video expects separate audio and strips it from input video)
-        clip = VideoFileClip(video_path)
-        if clip.audio:
-            clip.audio.write_audiofile(temp_audio, logger=None, codec=audio_codec)
-        clip.close()
+        import subprocess
         
-        if not os.path.exists(temp_audio):
-            logger.warning("No audio found in video, proceeding without audio")
-            # Create silent audio
-            from moviepy.audio.AudioClip import AudioClip
-            silent_audio = AudioClip(lambda t: 0, duration=0.1)
-            silent_audio.write_audiofile(temp_audio, fps=44100)
-
-        # Create basic params for subtitle generation
-        params = VideoParams(
-            video_subject="Caption",
-            subtitle_enabled=True,
-            font_size=60,
-            text_fore_color="#FFFFFF",
-            font_name="STHeitiMedium.ttc"
-        )
+        # Use ffmpeg to burn subtitles directly
+        # This preserves the video quality and audio perfectly
+        subtitle_path_escaped = subtitle_path.replace('\\', '/').replace(':', '\\:')
         
-        generate_video(
-            video_path=video_path,
-            audio_path=temp_audio,
-            subtitle_path=subtitle_path,
-            output_file=output_path,
-            params=params
-        )
+        cmd = [
+            'ffmpeg',
+            '-i', video_path,
+            '-vf', f"subtitles='{subtitle_path_escaped}':force_style='FontName=Arial,FontSize=24,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,Outline=2,Alignment=2'",
+            '-c:a', 'copy',  # Copy audio without re-encoding
+            '-c:v', 'libx264',
+            '-preset', 'medium',
+            '-crf', '18',
+            '-y',  # Overwrite output file
+            output_path
+        ]
         
+        logger.info(f"Burning subtitles into video: {output_path}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.error(f"ffmpeg failed: {result.stderr}")
+            # Fallback: copy original
+            if os.path.exists(video_path):
+                shutil.copy(video_path, output_path)
+        else:
+            logger.success(f"Subtitles burned successfully: {output_path}")
+            
     except Exception as e:
         logger.error(f"Failed to add subtitles: {e}")
-        # If failure, try to just copy original to output if output doesn't exist
+        # Fallback: copy original to output
         if os.path.exists(video_path) and not os.path.exists(output_path):
-             shutil.copy(video_path, output_path)
-    
-    finally:
-        if os.path.exists(temp_audio):
-            try:
-                os.remove(temp_audio)
-            except:
-                pass
+            shutil.copy(video_path, output_path)
 
 def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
     for material in materials:
