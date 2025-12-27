@@ -1001,8 +1001,6 @@ def generate_video(
     video_clip.close()
     del video_clip
 
-
-def 
 def add_subtitles(video_path: str, subtitle_path: str, output_path: str):
     """
     Burn subtitles into video.
