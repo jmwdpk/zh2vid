@@ -2309,28 +2309,7 @@ def create_subtitle(sub_maker: SubMaker, text: str, subtitle_file: str):
                 start_time = -1.0
                 sub_line = ""
 
-        # Write what we have, even if not all lines matched
-        if sub_items:
-            # Handle any remaining unmatched script lines
-            if sub_index < len(script_lines):
-                logger.warning(
-                    f"Not all script lines matched. Matched: {sub_index}/{len(script_lines)}"
-                )
-                # Add remaining script lines with placeholder timestamps
-                # These will be corrected by Whisper if fallback is triggered
-                for remaining_idx in range(sub_index, len(script_lines)):
-                    remaining_text = script_lines[remaining_idx].strip()
-                    if remaining_text:
-                        # Use last known timestamp as placeholder
-                        last_time = end_time if 'end_time' in locals() else 0
-                        line = formatter(
-                            idx=len(sub_items) + 1,
-                            start_time=last_time,
-                            end_time=last_time,
-                            sub_text=remaining_text,
-                        )
-                        sub_items.append(line)
-            
+        if len(sub_items) == len(script_lines):
             with open(subtitle_file, "w", encoding="utf-8") as file:
                 file.write("\n".join(sub_items) + "\n")
             try:
@@ -2340,11 +2319,11 @@ def create_subtitle(sub_maker: SubMaker, text: str, subtitle_file: str):
                     f"completed, subtitle file created: {subtitle_file}, duration: {duration}"
                 )
             except Exception as e:
-                logger.error(f"failed to validate subtitle file, error: {str(e)}")
-                # Don't remove the file - let the validation in create_subtitle handle it
+                logger.error(f"failed, error: {str(e)}")
+                os.remove(subtitle_file)
         else:
             logger.warning(
-                f"failed to create any subtitle items, sub_items len: {len(sub_items)}, script_lines len: {len(script_lines)}"
+                f"failed, sub_items len: {len(sub_items)}, script_lines len: {len(script_lines)}"
             )
 
     except Exception as e:
