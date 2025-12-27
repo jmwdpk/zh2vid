@@ -355,16 +355,19 @@ async def process_article_to_segments(url: str, target_language: Optional[str] =
     # Step 2: Extract post info (title + content)
     extracted = extract_post_info(raw_markdown)
     logger.info(f"Extracted post info: {len(extracted)} characters")
-    
+    print(extracted)
+
     # Step 3: Process markdown (replace images with $n$ patterns)
     cleaned_markdown, image_links = process_markdown(extracted)
     logger.info(f"Found {len(image_links)} images in article")
-    
+    print(cleaned_markdown)
+
     # Step 4: Translate if requested
     if target_language:
         logger.info(f"Translating article to {target_language}...")
         cleaned_markdown = translate_text(cleaned_markdown, target_lang=target_language)
-    
+    print(cleaned_markdown)
+
     # Step 5: Split into segments
     segments = get_script_segments(cleaned_markdown)
     logger.info(f"Created {len(segments)} script segments")
@@ -373,7 +376,7 @@ async def process_article_to_segments(url: str, target_language: Optional[str] =
     title = "Article Video"
     if segments and segments[0].text.startswith('#'):
         title = segments[0].text.lstrip('#').strip()
-    
+    print(title)
     return segments, image_links, title
 
 
