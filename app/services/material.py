@@ -219,6 +219,190 @@ def save_video(video_url: str, save_dir: str = "", search_term: str = "", thumbn
     return ""
 
 
+def search_images_pexels(
+    search_term: str,
+    video_aspect: VideoAspect = VideoAspect.portrait,
+    per_page: int = 20
+) -> List[MaterialInfo]:
+    """Search for images on Pexels."""
+    aspect = VideoAspect(video_aspect)
+    video_orientation = aspect.name
+    
+    api_key = get_api_key("pexels_api_keys")
+    headers = {
+        "Authorization": api_key,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    }
+    
+    params = {"query": search_term, "per_page": per_page, "orientation": video_orientation}
+    query_url = f"https://api.pexels.com/v1/search?{urlencode(params)}"
+    logger.info(f"searching images: {query_url}")
+    
+    try:
+        r = requests.get(query_url, headers=headers, proxies=config.proxy, verify=False, timeout=(30, 60))
+        response = r.json()
+        image_items = []
+        
+        if "photos" not in response:
+            logger.error(f"search images failed: {response}")
+            return image_items
+            
+        for photo in response["photos"]:
+            src = photo.get("src", {})
+            image_url = src.get("original") or src.get("large2x") or src.get("large")
+            
+            if image_url:
+                item = MaterialInfo()
+                item.provider = "pexels"
+                item.url = image_url
+                item.duration = 0
+                item.search_term = search_term
+                if "src" in photo and "medium" in photo["src"]:
+                    item.thumbnail_url = photo["src"]["medium"]
+                image_items.append(item)
+                
+        logger.info(f"found {len(image_items)} images for '{search_term}'")
+        return image_items
+    except Exception as e:
+        logger.error(f"search images failed: {str(e)}")
+    return []
+
+
+def search_images_pixabay(
+    search_term: str,
+    video_aspect: VideoAspect = VideoAspect.portrait,
+    per_page: int = 50
+) -> List[MaterialInfo]:
+    """Search for images on Pixabay."""
+    api_key = get_api_key("pixabay_api_keys")
+    params = {"q": search_term, "image_type": "photo", "per_page": per_page, "key": api_key}
+    query_url = f"https://pixabay.com/api/?{urlencode(params)}"
+    logger.info(f"searching images: {query_url}")
+    
+    try:
+        r = requests.get(query_url, proxies=config.proxy, verify=False, timeout=(30, 60))
+        response = r.json()
+        image_items = []
+        
+        if "hits" not in response:
+            logger.error(f"search images failed: {response}")
+            return image_items
+            
+        for hit in response["hits"]:
+            image_url = hit.get("largeImageURL") or hit.get("webformatURL")
+            if image_url:
+                item = MaterialInfo()
+                item.provider = "pixabay"
+                item.url = image_url
+                item.duration = 0
+                item.search_term = search_term
+                if "previewURL" in hit:
+                    item.thumbnail_url = hit["previewURL"]
+                image_items.append(item)
+                
+        logger.info(f"found {len(image_items)} images for '{search_term}'")
+        return image_items
+    except Exception as e:
+        logger.error(f"search images failed: {str(e)}")
+    return []
+
+
+def save_image(image_url: str, save_dir: str = "", search_term: str = "") -> str:
+    """Download and save an image from URL."""
+    if not save_dir:
+        save_dir = utils.storage_dir("cache_images")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        
+    url_without_query = image_url.split("?")[0]
+    url_hash = utils.md5(url_without_query)
+    ext = os.path.splitext(url_without_query)[-1]
+    if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
+        ext = '.jpg'
+    image_path = f"{save_dir}/img-{url_hash}{ext}"
+    
+    if os.path.exists(image_path) and os.path.getsize(image_path) > 0:
+        logger.info(f"image already exists: {image_path}")
+        return image_path
+        
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    try:
+        with open(image_path, "wb") as f:
+            f.write(requests.get(image_url, headers=headers, proxies=config.proxy, verify=False, timeout=(60, 240)).content)
+        if os.path.exists(image_path) and os.path.getsize(image_path) > 0:
+            return image_path
+    except Exception as e:
+        logger.warning(f"failed to download image: {image_path} => {str(e)}")
+        if os.path.exists(image_path):
+            try:
+                os.remove(image_path)
+            except Exception:
+                pass
+    return ""
+
+
+def download_images(
+    task_id: str,
+    search_terms: List[str],
+    source: str = "pexels",
+    video_aspect: VideoAspect = VideoAspect.portrait,
+    max_images: int = 1,
+    used_urls: set = None
+) -> List[str]:
+    """Download images with diversity tracking."""
+    if used_urls is None:
+        used_urls = set()
+        
+    search_images = search_images_pexels if source == "pexels" else search_images_pixabay
+    images_by_term = {}
+    
+    for search_term in search_terms:
+        image_items = search_images(search_term=search_term, video_aspect=video_aspect)
+        unique_images = [item for item in image_items if item.url not in used_urls]
+        if unique_images:
+            images_by_term[search_term] = unique_images
+            
+    if not images_by_term:
+        logger.warning(f"No unique images found for terms: {search_terms}")
+        return []
+        
+    # Round-robin selection
+    selected_images = []
+    max_per_term = max(1, max_images // len(images_by_term))
+    
+    for search_term, images in images_by_term.items():
+        random.shuffle(images)
+        count = 0
+        for item in images:
+            if item.url not in used_urls and count < max_per_term and len(selected_images) < max_images:
+                selected_images.append(item)
+                used_urls.add(item.url)
+                count += 1
+                
+    logger.info(f"selected {len(selected_images)} images from {len(images_by_term)} search terms")
+    
+    # Download
+    image_paths = []
+    material_directory = config.app.get("material_directory", "").strip()
+    if material_directory == "task":
+        material_directory = utils.task_dir(task_id)
+    elif material_directory and not os.path.isdir(material_directory):
+        material_directory = ""
+        
+    for item in selected_images:
+        try:
+            logger.info(f"downloading image: {item.url}")
+            saved_path = save_image(image_url=item.url, save_dir=material_directory, search_term=item.search_term)
+            if saved_path:
+                logger.info(f"image saved: {saved_path} (search_term: '{item.search_term}')")
+                image_paths.append(saved_path)
+        except Exception as e:
+            logger.error(f"failed to download image: {item.url} => {str(e)}")
+            
+    logger.success(f"downloaded {len(image_paths)} images")
+    return image_paths
+
+
 def download_videos(
     task_id: str,
     search_terms: List[str],

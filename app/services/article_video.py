@@ -25,14 +25,24 @@ from app.services.utils.process_md import (
 from app.services import material, video, voice, llm
 from app.utils import utils
 
+# Global diversity tracker for images across all segments
+_used_image_urls = set()
 
-def translate_text(text: str, target_lang: str = "English") -> str:
+def reset_image_diversity_tracker():
+    """Reset the global image diversity tracker. Call this at the start of each video generation."""
+    global _used_image_urls
+    _used_image_urls.clear()
+    logger.info("Image diversity tracker reset")
+
+
+def translate_text(text: str, target_lang: str = "English", max_words = 400) -> str:
     """
     Translate text using pollinations.ai.
     
     Args:
         text: The text to translate
         target_lang: The target language (default: English)
+        max_words: The maximum number of words in the output (default: 400)
         
     Returns:
         Translated text, or original text if translation fails
@@ -44,13 +54,14 @@ def translate_text(text: str, target_lang: str = "English") -> str:
 # Role: Professional Translator
 
 ## Goals:
-Translate the following text into {target_lang}, generate a script that can be used for creating a finance youtube short video
+Translate and summarize the following text into {target_lang}, generate a script that can be used for creating a youtube short video
 
 ## Constraints:
-1. Maintain the financially professional and informative tone(re-word if necessary) 
+1. Maintain the professional and informative tone(re-word/rewrite if necessary) 
 2. Keep the original structure and formatting (markdown).
 3. IMPORTANT: Preserve any image patterns like ![]($1$), ![]($2$), etc. EXACTLY as they appear. Do not translate the numbers or symbols within these patterns.
 4. Return ONLY the translated text, nothing else.
+5. The output should be no longer than {max_words} words.
 
 ## Text to Translate:
 {text}
@@ -91,10 +102,9 @@ Generate/summarize/extract {amount} search terms for stock videos/images that wo
 ## Constraints:
 1. Return ONLY an array of strings, nothing else.
 2. Each search term should be 1-3 words.
-3. Terms must be in English.
-4. Terms should describe visual scenes, objects, or actions that match the text meaning.
-5. Focus on concrete, searchable concepts (not abstract ideas).
-6. Keep the notable/famous figure's name as a term
+3. Terms should describe visual scenes, objects, or actions that match the text meaning.
+4. Focus on concrete, searchable concepts (not abstract ideas).
+5. Keep the main movement like up/down; entity like: notable/famous figure's name, notable company name/notable stock ticker name, etc. as a terms
 
 ## Script Segment:
 {segment_text}
@@ -309,29 +319,40 @@ def get_segment_visual(
         else:
             logger.info(f"Skipping article image {segment.image_index} (Index {image_idx} not in allowed list {allowed_image_indices})")
     
-    # Search for video/image based on segment content
+    # Search for images based on segment content
     search_terms = generate_segment_search_terms(segment.text)
     if not search_terms:
         logger.warning(f"No search terms generated for segment: {segment.text[:50]}...")
         return None
     
-    logger.info(f"Searching for visuals with terms: {search_terms}")
+    logger.info(f"Searching for images with terms: {search_terms}")
     
-    # Try to download videos for search terms
-    downloaded_videos = material.download_videos(
+    # Download ONE semantically relevant image with diversity tracking
+    global _used_image_urls
+    downloaded_images = material.download_images(
         task_id="segment",
         search_terms=search_terms,
         source=video_source,
         video_aspect=video_aspect,
-        audio_duration=segment_duration,
-        max_clip_duration=int(segment_duration) + 1
+        max_images=1,  # Only need one image per segment
+        used_urls=_used_image_urls  # Pass global tracker for diversity
     )
     
-    if downloaded_videos:
-        return downloaded_videos[0]
+    if downloaded_images:
+        image_path = downloaded_images[0]
+        # Convert image to video with EXACT segment duration
+        video_path = os.path.join(task_dir, f"segment-{utils.md5(segment.text[:50])}.mp4")
+        logger.info(f"Converting image to video with duration={segment_duration:.2f}s")
+        return create_video_from_image(
+            image_path=image_path,
+            duration=segment_duration,  # EXACT match with audio duration
+            output_path=video_path,
+            video_aspect=video_aspect,
+            apply_zoom=True
+        )
     
-    # Fallback: search for images if no videos found
-    logger.warning(f"No videos found, segment will need fallback visual")
+    # Fallback: no images found
+    logger.warning(f"No images found for segment, visual generation failed")
     return None
 
 

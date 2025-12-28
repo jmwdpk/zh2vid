@@ -94,6 +94,9 @@ def generate_article_video(
     logger.info("Step 2/6: Generating visuals for segments...")
     logger.info("=" * 60)
     
+    # Reset image diversity tracker to ensure no duplicates across segments
+    article_video.reset_image_diversity_tracker()
+    
     segment_videos = []
     
     for i, segment in enumerate(segments, 1):
