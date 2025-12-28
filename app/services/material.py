@@ -347,11 +347,37 @@ def download_images(
     source: str = "pexels",
     video_aspect: VideoAspect = VideoAspect.portrait,
     max_images: int = 1,
-    used_urls: set = None
+    used_urls: set = None,
+    duration: float = None,
+    seconds_per_image: float = 5.0
 ) -> List[str]:
-    """Download images with diversity tracking."""
+    """
+    Download images with diversity tracking.
+    
+    Args:
+        task_id: Task ID for storage
+        search_terms: List of search terms
+        source: Image source (pexels/pixabay)
+        video_aspect: Aspect ratio
+        max_images: Maximum images to download (overridden by duration if provided)
+        used_urls: Set of already used image URLs for diversity tracking
+        duration: Total duration in seconds (if provided, calculates max_images automatically)
+        seconds_per_image: Target seconds per image for slideshow effect (default: 5)
+        
+    Returns:
+        List of downloaded image paths
+    """
     if used_urls is None:
         used_urls = set()
+    
+    # Calculate max_images based on duration if provided
+    if duration is not None:
+        calculated_max = max(1, int(duration / seconds_per_image))
+        # If remaining time is at least 2 seconds, add one more image
+        if duration % seconds_per_image >= 2:
+            calculated_max += 1
+        max_images = calculated_max
+        logger.info(f"Duration {duration:.2f}s with {seconds_per_image}s per image → requesting {max_images} images")
         
     search_images = search_images_pexels if source == "pexels" else search_images_pixabay
     images_by_term = {}
@@ -366,7 +392,7 @@ def download_images(
         logger.warning(f"No unique images found for terms: {search_terms}")
         return []
         
-    # Round-robin selection
+    # Round-robin selection for diversity
     selected_images = []
     max_per_term = max(1, max_images // len(images_by_term))
     

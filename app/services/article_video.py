@@ -61,7 +61,7 @@ Translate and summarize the following text into {target_lang}, generate a script
 2. Keep the original structure and formatting (markdown).
 3. IMPORTANT: Preserve any image patterns like ![]($1$), ![]($2$), etc. EXACTLY as they appear. Do not translate the numbers or symbols within these patterns.
 4. Return ONLY the translated text, nothing else.
-5. The output should be no longer than {max_words} words.
+5. The output must be at most {max_words} words in count.
 
 ## Text to Translate:
 {text}
@@ -327,22 +327,77 @@ def get_segment_visual(
     
     logger.info(f"Searching for images with terms: {search_terms}")
     
-    # Download ONE semantically relevant image with diversity tracking
+    # Download images with automatic slideshow calculation (k=5 seconds per image)
     global _used_image_urls
     downloaded_images = material.download_images(
         task_id="segment",
         search_terms=search_terms,
         source=video_source,
         video_aspect=video_aspect,
-        max_images=1,  # Only need one image per segment
-        used_urls=_used_image_urls  # Pass global tracker for diversity
+        used_urls=_used_image_urls,
+        duration=segment_duration,  # Pass duration for automatic calculation
+        seconds_per_image=5.0  # k = 5 seconds per image
     )
     
     if downloaded_images:
+        # If we have multiple images, create a slideshow
+        if len(downloaded_images) > 1:
+            logger.info(f"Creating slideshow with {len(downloaded_images)} images for {segment_duration:.2f}s segment")
+            
+            segment_clips = []
+            # Distribute total duration evenly among images
+            base_duration = segment_duration / len(downloaded_images)
+            
+            for i, image_path in enumerate(downloaded_images):
+                temp_clip_path = os.path.join(task_dir, f"temp-seg-{utils.md5(image_path)}.mp4")
+                # Last image gets any remaining time to ensure exact total duration
+                actual_duration = base_duration if i < len(downloaded_images) - 1 else segment_duration - (base_duration * i)
+                
+                logger.info(f"  Image {i+1}/{len(downloaded_images)}: {actual_duration:.2f}s")
+                res_path = create_video_from_image(
+                    image_path=image_path,
+                    duration=actual_duration,
+                    output_path=temp_clip_path,
+                    video_aspect=video_aspect,
+                    apply_zoom=True
+                )
+                if res_path:
+                    segment_clips.append(res_path)
+            
+            if segment_clips:
+                # Combine the slideshow clips into one segment video
+                final_segment_path = os.path.join(task_dir, f"segment-{utils.md5(segment.text[:50])}.mp4")
+                
+                from moviepy import VideoFileClip, concatenate_videoclips
+                clips = [VideoFileClip(p) for p in segment_clips]
+                final_clip = concatenate_videoclips(clips, method="compose")
+                
+                final_clip.write_videofile(
+                    final_segment_path,
+                    fps=30,
+                    codec="libx264",
+                    audio=False,  # Segments don't have audio yet
+                    logger=None,
+                    ffmpeg_params=["-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p"]
+                )
+                
+                # Cleanup
+                for c in clips:
+                    c.close()
+                final_clip.close()
+                for p in segment_clips:
+                    try:
+                        os.remove(p)
+                    except:
+                        pass
+                    
+                logger.success(f"Slideshow created: {len(downloaded_images)} images, {segment_duration:.2f}s total")
+                return final_segment_path
+        
+        # Single image fallback
         image_path = downloaded_images[0]
-        # Convert image to video with EXACT segment duration
         video_path = os.path.join(task_dir, f"segment-{utils.md5(segment.text[:50])}.mp4")
-        logger.info(f"Converting image to video with duration={segment_duration:.2f}s")
+        logger.info(f"Converting single image to video with duration={segment_duration:.2f}s")
         return create_video_from_image(
             image_path=image_path,
             duration=segment_duration,  # EXACT match with audio duration
