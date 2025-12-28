@@ -26,7 +26,8 @@ from app.config import config
 from app.models.schema import VideoAspect
 from app.services.article_video import (
     process_article_to_segments_sync,
-    get_segment_visual
+    get_segment_visual,
+    reset_image_diversity_tracker
 )
 from app.services import voice, subtitle, video
 from loguru import logger
@@ -95,7 +96,7 @@ def generate_article_video(
     logger.info("=" * 60)
     
     # Reset image diversity tracker to ensure no duplicates across segments
-    article_video.reset_image_diversity_tracker()
+    reset_image_diversity_tracker()
     
     segment_videos = []
     
