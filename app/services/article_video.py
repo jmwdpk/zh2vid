@@ -35,7 +35,7 @@ def reset_image_diversity_tracker():
     logger.info("Image diversity tracker reset")
 
 
-def translate_text(text: str, target_lang: str = "English", max_words = 400) -> str:
+def translate_text(text: str, target_lang: str = "English", max_words: int = 400) -> str:
     """
     Translate text using pollinations.ai.
     
@@ -58,10 +58,10 @@ Translate and summarize the following text into {target_lang}, generate a script
 
 ## Constraints:
 1. Maintain the professional and informative tone(re-word/rewrite if necessary) 
-2. Keep the original structure and formatting (markdown).
-3. IMPORTANT: Preserve any image patterns like ![]($1$), ![]($2$), etc. EXACTLY as they appear. Do not translate the numbers or symbols within these patterns.
-4. Return ONLY the translated text, nothing else.
-5. The output must be at most {max_words} words in count.
+2. The output words count must be strictly less than {max_words}.
+3. Keep the original structure and formatting (markdown).
+4. IMPORTANT: Preserve any image patterns like ![]($1$), ![]($2$), etc. EXACTLY as they appear. Do not translate the numbers or symbols within these patterns.
+5. Return ONLY the translated text, nothing else.
 
 ## Text to Translate:
 {text}
@@ -409,6 +409,143 @@ def get_segment_visual(
     # Fallback: no images found
     logger.warning(f"No images found for segment, visual generation failed")
     return None
+
+
+def create_complete_segment_video(
+    segment: ScriptSegment,
+    segment_index: int,
+    task_dir: str,
+    voice_name: str,
+    voice_rate: float,
+    video_aspect: VideoAspect,
+    video_source: str,
+    image_links: List[str],
+    allowed_image_indices: List[int],
+    sub_maker_type: str = "edge"
+) -> Optional[str]:
+    """
+    Create a complete segment video with visual, audio, and subtitles merged.
+    
+    Args:
+        segment: The script segment
+        segment_index: Index of this segment (for naming)
+        task_dir: Directory for saving files
+        voice_name: TTS voice to use
+        voice_rate: Speech rate multiplier
+        video_aspect: Video aspect ratio
+        video_source: Source for stock images (pexels/pixabay)
+        image_links: List of article image URLs
+        allowed_image_indices: Indices of article images allowed to use
+        sub_maker_type: Subtitle maker type
+        
+    Returns:
+        Path to the complete segment video, or None if creation fails
+    """
+    logger.info(f"[Segment {segment_index + 1}] Creating complete segment video")
+    logger.info(f"  Text: {segment.text[:80]}...")
+    
+    # Step 1: Generate audio for THIS segment
+    logger.info(f"[Segment {segment_index + 1}] Step 1/4: Generating audio...")
+    try:
+        segment_audio, actual_duration, segment_submaker = voice.create_voiceover(
+            text=segment.text,
+            voice_name=voice_name,
+            voice_rate=voice_rate,
+            task_id=f"seg{segment_index:03d}"
+        )
+        
+        if not segment_audio or not os.path.exists(segment_audio):
+            logger.error(f"[Segment {segment_index + 1}] Audio generation failed")
+            return None
+            
+        logger.success(f"[Segment {segment_index + 1}] Audio: {actual_duration:.2f}s")
+        
+    except Exception as e:
+        logger.error(f"[Segment {segment_index + 1}] Audio generation error: {e}")
+        return None
+    
+    # Step 2: Generate visual with EXACT audio duration
+    logger.info(f"[Segment {segment_index + 1}] Step 2/4: Generating visual...")
+    try:
+        segment_visual = get_segment_visual(
+            segment=segment,
+            segment_duration=actual_duration,  # Use ACTUAL audio duration
+            image_links=image_links,
+            task_dir=task_dir,
+            video_aspect=video_aspect,
+            video_source=video_source,
+            allowed_image_indices=allowed_image_indices
+        )
+        
+        if not segment_visual or not os.path.exists(segment_visual):
+            logger.error(f"[Segment {segment_index + 1}] Visual generation failed")
+            return None
+            
+        logger.success(f"[Segment {segment_index + 1}] Visual: {os.path.basename(segment_visual)}")
+        
+    except Exception as e:
+        logger.error(f"[Segment {segment_index + 1}] Visual generation error: {e}")
+        return None
+    
+    # Step 3: Generate subtitle for THIS segment
+    logger.info(f"[Segment {segment_index + 1}] Step 3/4: Generating subtitle...")
+    try:
+        from app.services import subtitle as subtitle_service
+        
+        segment_subtitle = subtitle_service.create_subtitle(
+            task_id=f"seg{segment_index:03d}",
+            script=segment.text,
+            audio_file=segment_audio,
+            voice_name=voice_name,
+            sub_maker=segment_submaker
+        )
+        
+        if segment_subtitle and os.path.exists(segment_subtitle):
+            logger.success(f"[Segment {segment_index + 1}] Subtitle: {os.path.basename(segment_subtitle)}")
+        else:
+            logger.warning(f"[Segment {segment_index + 1}] Subtitle generation failed, continuing without")
+            segment_subtitle = None
+            
+    except Exception as e:
+        logger.warning(f"[Segment {segment_index + 1}] Subtitle generation error: {e}")
+        segment_subtitle = None
+    
+    # Step 4: Merge visual + audio + subtitle → final segment video
+    logger.info(f"[Segment {segment_index + 1}] Step 4/4: Merging components...")
+    try:
+        final_segment_path = os.path.join(task_dir, f"final_segment_{segment_index:03d}.mp4")
+        
+        from app.models.schema import VideoParams
+        from app.config import config
+        
+        params = VideoParams(
+            video_aspect=video_aspect,
+            font_name=config.app.get("font_name", "STHeitiMedium.ttc"),
+            text_fore_color=config.app.get("text_fore_color", "#FFFFFF"),
+            text_background_color=config.app.get("text_background_color", "transparent"),
+            font_size=config.app.get("font_size", 60),
+            stroke_color=config.app.get("stroke_color", "#000000"),
+            stroke_width=config.app.get("stroke_width", 1.5),
+        )
+        
+        video.generate_video(
+            video_path=segment_visual,
+            audio_path=segment_audio,
+            subtitle_path=segment_subtitle if segment_subtitle else None,
+            output_file=final_segment_path,
+            params=params
+        )
+        
+        if os.path.exists(final_segment_path):
+            logger.success(f"[Segment {segment_index + 1}] ✓ Complete segment video created: {actual_duration:.2f}s")
+            return final_segment_path
+        else:
+            logger.error(f"[Segment {segment_index + 1}] Failed to create final segment video")
+            return None
+            
+    except Exception as e:
+        logger.error(f"[Segment {segment_index + 1}] Merge error: {e}")
+        return None
 
 
 async def process_article_to_segments(url: str, target_language: Optional[str] = None) -> Tuple[List[ScriptSegment], List[str], str]:

@@ -26,10 +26,8 @@ from app.config import config
 from app.models.schema import VideoAspect
 from app.services.article_video import (
     process_article_to_segments_sync,
-    get_segment_visual,
     reset_image_diversity_tracker
 )
-from app.services import voice, subtitle, video
 from loguru import logger
 
 import subprocess
@@ -90,160 +88,107 @@ def generate_article_video(
     os.makedirs(task_dir, exist_ok=True)
     logger.info(f"  - Output directory: {task_dir}")
     
-    # 2. Generate visuals for each segment
+    # 2. Generate complete segment videos (visual + audio + subtitle merged)
     logger.info("=" * 60)
-    logger.info("Step 2/6: Generating visuals for segments...")
+    logger.info("Step 2/3: Generating complete segment videos...")
     logger.info("=" * 60)
     
     # Reset image diversity tracker to ensure no duplicates across segments
     reset_image_diversity_tracker()
     
-    segment_videos = []
+    from app.services.article_video import create_complete_segment_video
     
-    for i, segment in enumerate(segments, 1):
-        # Estimate duration based on text length
-        word_count = len(segment.text.split())
-        segment_duration = max(3.0, word_count / words_per_second)
-        
-        logger.info(f"\n[Segment {i}/{len(segments)}]")
-        logger.info(f"  Words: {word_count}, Duration: {segment_duration:.1f}s")
-        logger.info(f"  Has image: {segment.has_image}, Index: {segment.image_index}")
-        logger.info(f"  Text: {segment.text[:80]}...")
+    final_segment_videos = []
+    total_duration = 0.0
+    
+    for i, segment in enumerate(segments):
+        logger.info(f"\n{'=' * 60}")
+        logger.info(f"Processing Segment {i + 1}/{len(segments)}")
+        logger.info(f"{'=' * 60}")
         
         try:
-            video_path = get_segment_visual(
+            complete_segment_path = create_complete_segment_video(
                 segment=segment,
-                segment_duration=segment_duration,
-                image_links=image_links,
+                segment_index=i,
                 task_dir=task_dir,
+                voice_name=voice_name,
+                voice_rate=voice_rate,
                 video_aspect=video_aspect,
                 video_source=video_source,
+                image_links=image_links,
                 allowed_image_indices=use_image
             )
             
-            if video_path and os.path.exists(video_path):
-                segment_videos.append(video_path)
-                logger.success(f"  ✓ Generated: {os.path.basename(video_path)}")
+            if complete_segment_path and os.path.exists(complete_segment_path):
+                final_segment_videos.append(complete_segment_path)
+                
+                # Get duration from the video file
+                from moviepy import VideoFileClip
+                clip = VideoFileClip(complete_segment_path)
+                segment_duration = clip.duration
+                clip.close()
+                total_duration += segment_duration
+                
+                logger.success(f"✓ Segment {i + 1} complete: {segment_duration:.2f}s")
             else:
-                logger.warning(f"  ✗ Failed to generate visual for segment {i}")
+                logger.error(f"✗ Failed to create segment {i + 1}")
                 
         except Exception as e:
-            logger.error(f"  ✗ Error generating segment {i}: {e}")
+            logger.error(f"✗ Error creating segment {i + 1}: {e}")
     
-    if not segment_videos:
+    if not final_segment_videos:
         logger.error("No segment videos generated! Cannot continue.")
         return None
     
-    logger.success(f"\n✓ Generated {len(segment_videos)}/{len(segments)} segment videos")
-    
-    # 3. Generate audio
-    logger.info("=" * 60)
-    logger.info("Step 3/6: Generating voiceover...")
+    logger.info("\n" + "=" * 60)
+    logger.success(f"✓ Generated {len(final_segment_videos)}/{len(segments)} complete segment videos")
+    logger.info(f"  Total duration: {total_duration:.2f}s")
     logger.info("=" * 60)
     
-    full_script = "\n\n".join([seg.text for seg in segments])
-    logger.info(f"Script length: {len(full_script)} characters, {len(full_script.split())} words")
-    
-    try:
-        audio_file, audio_duration, sub_maker = voice.create_voiceover(
-            text=full_script,
-            voice_name=voice_name,
-            voice_rate=voice_rate,
-            task_id=task_id
-        )
-    except Exception as e:
-        logger.error(f"Failed to generate audio: {e}")
-        return None
-    
-    if not audio_file or not os.path.exists(audio_file):
-        logger.error("Audio generation failed!")
-        return None
-    
-    logger.success(f"✓ Generated voiceover: {audio_duration:.1f}s")
-    logger.info(f"  - File: {os.path.basename(audio_file)}")
-    
-    # 4. Generate subtitles
+    # 3. Concatenate all final segment videos
     logger.info("=" * 60)
-    logger.info("Step 4/6: Generating subtitles...")
-    logger.info("=" * 60)
-    
-    subtitle_path = None
-    try:
-        subtitle_path = subtitle.create_subtitle(
-            task_id=task_id,
-            script=full_script,
-            audio_file=audio_file,
-            voice_name=voice_name,
-            sub_maker=sub_maker
-        )
-        
-        if subtitle_path and os.path.exists(subtitle_path):
-            logger.success(f"✓ Generated subtitles: {os.path.basename(subtitle_path)}")
-        else:
-            logger.warning("Subtitle generation failed, continuing without subtitles")
-            
-    except Exception as e:
-        logger.warning(f"Subtitle generation error (continuing): {e}")
-    
-    # 5. Combine videos
-    logger.info("=" * 60)
-    logger.info("Step 5/6: Combining segment videos...")
-    logger.info("=" * 60)
-    
-    combined_video_path = os.path.join(task_dir, "combined_video.mp4")
-    
-    try:
-        video.combine_videos(
-            combined_video_path=combined_video_path,
-            video_paths=segment_videos,
-            audio_file=audio_file,
-            video_aspect=video_aspect
-        )
-        
-        if not os.path.exists(combined_video_path):
-            raise Exception("Combined video file not created")
-            
-        logger.success(f"✓ Combined {len(segment_videos)} segments")
-        logger.info(f"  - File: {os.path.basename(combined_video_path)}")
-        
-    except Exception as e:
-        logger.error(f"Failed to combine videos: {e}")
-        return None
-    
-    # 6. Add subtitles
-    logger.info("=" * 60)
-    logger.info("Step 6/6: Finalizing video...")
+    logger.info("Step 3/3: Concatenating final video...")
     logger.info("=" * 60)
     
     # Clean title for filename
     safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
     safe_title = safe_title[:50]  # Limit length
+    final_video_path = os.path.join(task_dir, f"{safe_title}_final.mp4")
     
-    if subtitle_path and os.path.exists(subtitle_path):
-        final_video_path = os.path.join(task_dir, f"{safe_title}_with_subs.mp4")
+    try:
+        from moviepy import VideoFileClip, concatenate_videoclips
         
-        try:
-            video.add_subtitles(
-                video_path=combined_video_path,
-                subtitle_path=subtitle_path,
-                output_path=final_video_path
-            )
+        logger.info(f"Loading {len(final_segment_videos)} segment videos...")
+        clips = [VideoFileClip(p) for p in final_segment_videos]
+        
+        logger.info("Concatenating segments...")
+        final_video = concatenate_videoclips(clips, method="compose")
+        
+        logger.info(f"Writing final video: {final_video_path}")
+        final_video.write_videofile(
+            final_video_path,
+            fps=30,
+            codec="libx264",
+            audio_codec="aac",
+            logger=None,
+            ffmpeg_params=["-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p"]
+        )
+        
+        # Cleanup
+        for clip in clips:
+            clip.close()
+        final_video.close()
+        
+        if not os.path.exists(final_video_path):
+            raise Exception("Final video file not created")
             
-            if os.path.exists(final_video_path):
-                logger.success("✓ Added subtitles to final video")
-            else:
-                logger.warning("Subtitle burning failed, using video without subtitles")
-                final_video_path = combined_video_path
-                
-        except Exception as e:
-            logger.warning(f"Failed to add subtitles (using video without): {e}")
-            final_video_path = combined_video_path
-    else:
-        final_video_path = combined_video_path
-        logger.info("No subtitles to add, using combined video as final")
+        logger.success(f"✓ Final video created: {total_duration:.2f}s")
+        logger.info(f"  - File: {os.path.basename(final_video_path)}")
+        
+    except Exception as e:
+        logger.error(f"Failed to concatenate videos: {e}")
+        return None
     
-    # 7. use title to generate an thumbnail and an youtube video title thats engaging/eye-catching for click
-#to do
     # Summary
     logger.info("=" * 60)
     logger.success("VIDEO GENERATION COMPLETE!")

@@ -996,72 +996,90 @@ def generate_video(
         codec=video_codec,
         bitrate=video_bitrate,
         audio_bitrate=audio_bitrate,
-        ffmpeg_params=quality_params
+    ffmpeg_params=quality_params
     )
     video_clip.close()
     del video_clip
 
-def add_subtitles(video_path: str, subtitle_path: str, output_path: str):
+def add_subtitles(video_path: str, subtitle_path: str, output_path: str, audio_path: str = None):
     """
     Burn subtitles into video.
-    Extracts audio from video_path to use as audio_path for generate_video.
+    
+    Args:
+        video_path: Path to the video file
+        subtitle_path: Path to the subtitle file
+        output_path: Path to save the output video
+        audio_path: Path to the audio file (if None, will try to extract from video)
     """
     if not os.path.exists(video_path):
         logger.error(f"Video path not found: {video_path}")
         return
 
     temp_audio = f"{output_path}.temp.mp3"
+    audio_to_use = audio_path  # Use provided audio if available
     
     try:
-        # Extract audio from existing video to preserve it
-        # (generate_video expects separate audio and strips it from input video)
-        clip = VideoFileClip(video_path)
-        if clip.audio:
-            # Use libmp3lame codec for MP3 files (aac is for M4A/MP4)
-            clip.audio.write_audiofile(temp_audio, logger=None, codec='libmp3lame')
-        clip.close()
+        # Get video duration for silent audio fallback
+        video_clip = VideoFileClip(video_path)
+        video_duration = video_clip.duration
         
-        if not os.path.exists(temp_audio):
-            logger.warning("No audio found in video, proceeding without audio")
-            # Create silent audio
-            from moviepy.audio.AudioClip import AudioClip
-            silent_audio = AudioClip(lambda t: 0, duration=0.1)
-            silent_audio.write_audiofile(temp_audio, fps=44100)
+        # If no audio path provided, try to extract from video
+        if not audio_to_use:
+            if video_clip.audio:
+                logger.info("Extracting audio from video")
+                video_clip.audio.write_audiofile(temp_audio, logger=None, codec='libmp3lame')
+                audio_to_use = temp_audio
+            else:
+                logger.warning("No audio found in video, creating silent audio")
+                # Create silent audio with SAME duration as video
+                from moviepy.audio.AudioClip import AudioClip
+                silent_audio = AudioClip(lambda t: 0, duration=video_duration)
+                silent_audio.write_audiofile(temp_audio, fps=44100, codec='libmp3lame')
+                audio_to_use = temp_audio
+        
+        video_clip.close()
+        
+        if not audio_to_use or not os.path.exists(audio_to_use):
+            logger.error("No valid audio source available")
+            # Copy original video as fallback
+            import shutil
+            shutil.copy(video_path, output_path)
+            return
 
-        # Create basic params for subtitle generation
+        # Generate video with subtitles
         params = VideoParams(
-            video_subject="Caption",
-            subtitle_enabled=True,
-            font_size=60,
-            text_fore_color="#FFFFFF",
-            font_name="STHeitiMedium.ttc"
+            video_aspect=VideoAspect.portrait,
+            font_name=config.app.get("font_name", "STHeitiMedium.ttc"),
+            text_fore_color=config.app.get("text_fore_color", "#FFFFFF"),
+            text_background_color=config.app.get("text_background_color", "transparent"),
+            font_size=config.app.get("font_size", 60),
+            stroke_color=config.app.get("stroke_color", "#000000"),
+            stroke_width=config.app.get("stroke_width", 1.5),
         )
-        
+
         generate_video(
             video_path=video_path,
-            audio_path=temp_audio,
+            audio_path=audio_to_use,
             subtitle_path=subtitle_path,
             output_file=output_path,
             params=params
         )
-        
     except Exception as e:
         logger.error(f"Failed to add subtitles: {e}")
-        # If failure, try to just copy original to output if output doesn't exist
-        if os.path.exists(video_path) and not os.path.exists(output_path):
-             shutil.copy(video_path, output_path)
-    
+        # Fallback: copy original video
+        import shutil
+        if os.path.exists(video_path):
+            shutil.copy(video_path, output_path)
     finally:
-        if os.path.exists(temp_audio):
+        # Cleanup temp audio only if we created it
+        if temp_audio and os.path.exists(temp_audio) and temp_audio != audio_path:
             try:
                 os.remove(temp_audio)
-            except:
+            except Exception:
                 pass
 
 def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
     for material in materials:
-        if not material.url:
-            continue
 
         ext = utils.parse_extension(material.url)
         try:
