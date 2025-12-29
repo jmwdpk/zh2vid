@@ -523,7 +523,7 @@ def create_complete_segment_video(
             video_aspect=video_aspect,
             font_name=config.app.get("font_name", "STHeitiMedium.ttc"),
             text_fore_color=config.app.get("text_fore_color", "#FFFFFF"),
-            text_background_color=config.app.get("text_background_color", "transparent"),
+            text_background_color=config.app.get("text_background_color", False),
             font_size=config.app.get("font_size", 60),
             stroke_color=config.app.get("stroke_color", "#000000"),
             stroke_width=config.app.get("stroke_width", 1.5),
