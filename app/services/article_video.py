@@ -519,6 +519,7 @@ def create_complete_segment_video(
         from app.config import config
         
         params = VideoParams(
+            video_subject=segment.text[:100],  # Use first 100 chars as subject
             video_aspect=video_aspect,
             font_name=config.app.get("font_name", "STHeitiMedium.ttc"),
             text_fore_color=config.app.get("text_fore_color", "#FFFFFF"),
