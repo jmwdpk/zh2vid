@@ -78,7 +78,7 @@ def generate_article_video(
     except Exception as e:
         logger.error(f"Failed to parse article: {e}")
         return None
-    
+    segments = segments[:1]
     logger.success(f"✓ Parsed article with title: '{title}'")
     logger.info(f"  - {len(segments)} script segments")
     logger.info(f"  - {len(image_links)} embedded images")
